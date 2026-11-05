@@ -10,7 +10,6 @@ To run the tests and generate local coverage:
 1. Run `bundle exec rake test`.
 2. Open `coverage/index.html` in a browser to view the coverage report.
 
-In the Fedora toolbox, run these commands inside the `sloperator` container.
 The test task runs Minitest and the JavaScript tests. JavaScript tests use Node.js's
 built-in test runner and require no npm packages. Ensure a recent Node.js version
 (22 or later) is on PATH inside the test environment. If `node` is unavailable,
