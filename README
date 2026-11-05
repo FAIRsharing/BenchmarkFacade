@@ -1,0 +1,21 @@
+To setup:
+
+1. install RVM.
+2. cd to the app's directory, RVM should detect the necessary gemset.
+3. `gem install bundler` and then `bundle install`.
+4. `bundle exec rackup -E development -o 127.0.0.1 -p 4567`
+
+To run the tests and generate local coverage:
+
+1. Run `bundle exec rake test`.
+2. Open `coverage/index.html` in a browser to view the coverage report.
+
+In the Fedora toolbox, run these commands inside the `sloperator` container.
+The test task runs Minitest and the JavaScript tests. JavaScript tests use Node.js's
+built-in test runner and require no npm packages. Ensure a recent Node.js version
+(22 or later) is on PATH inside the test environment. If `node` is unavailable,
+only the JavaScript tests are skipped, with a warning. JavaScript test failures
+fail the task when Node.js is available.
+
+Run `bundle exec rake test:ruby` or `bundle exec rake test:javascript` to run either
+suite separately. The SimpleCov report covers Ruby code only.

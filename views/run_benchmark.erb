@@ -1,0 +1,32 @@
+<h2 class="mb-4"><%= Rack::Utils.escape_html(@config[:title]) %></h2>
+
+<% if @error %>
+  <div class="alert alert-danger" role="alert"><%= Rack::Utils.escape_html(@error) %></div>
+<% else %>
+  <div id="benchmark" data-endpoint="/<%= Rack::Utils.escape_html(@operation) %>/run"
+       data-guid="<%= Rack::Utils.escape_html(@guid) %>" aria-busy="false">
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <p>Running benchmark at <%= Rack::Utils.escape_html(@config[:calculation_uri]) %></p>
+        <p>On: <%= Rack::Utils.escape_html(@guid) %></p>
+        <div id="benchmark-loading" role="status" hidden>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          Running benchmark…
+          <span id="benchmark-waiting">waiting for champion — 0 seconds elapsed</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="benchmark-error" class="alert alert-danger" role="alert" hidden></div>
+    <div id="benchmark-results" class="card shadow-sm" aria-live="polite" hidden>
+      <div class="card-header">Results</div>
+      <div class="card-body"><pre id="benchmark-json" class="mb-0"></pre></div>
+    </div>
+    <noscript>JavaScript is required to run the benchmark.</noscript>
+  </div>
+  <script src="/js/benchmark.js" defer></script>
+<% end %>
+
+<form action="/" method="get">
+  <button type="submit" class="btn btn-secondary mt-4">home</button>
+</form>
