@@ -6,15 +6,30 @@ const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../../public/js/benchmark.js"), "utf8");
 
+function element(tagName = "div") {
+  return {
+    tagName, hidden: true, textContent: "", children: [],
+    setAttribute(name, value) { this[name] = value; },
+    append(...children) { this.children.push(...children); },
+    replaceChildren(...children) { this.children = children; },
+    addEventListener(event, callback) { this.listeners ||= {}; this.listeners[event] = callback; }
+  };
+}
+
+function descendants(node, tagName) {
+  return [node, ...node.children.flatMap(child => descendants(child, tagName))]
+    .filter(child => !tagName || child.tagName === tagName);
+}
+
+function text(node) {
+  return node.textContent + node.children.filter(child => child["aria-hidden"] !== "true").map(text).join(" ");
+}
+
 function startBenchmark(response) {
   const elements = Object.fromEntries([
     "benchmark", "benchmark-loading", "benchmark-waiting", "benchmark-error",
-    "benchmark-results", "benchmark-json"
-  ].map(id => [id, {
-    hidden: true,
-    textContent: "",
-    setAttribute(name, value) { this[name] = value; }
-  }]));
+    "benchmark-results", "benchmark-table", "benchmark-status", "benchmark-expand-controls"
+  ].map(id => [id, element()]));
   elements.benchmark.dataset = {
     endpoint: "/institutional_benchmark/run",
     guid: "https://example.org/object?name=a&format=json"
@@ -26,7 +41,7 @@ function startBenchmark(response) {
   const requests = [];
   const intervals = new Map();
   const context = {
-    document: { getElementById: id => elements[id] },
+    document: { getElementById: id => elements[id], createElement: element },
     URLSearchParams,
     performance: { now: () => elapsed },
     setInterval(callback, delay) {
@@ -61,7 +76,7 @@ function assertFinished(benchmark) {
   assert.equal(benchmark.elements.benchmark["aria-busy"], "false");
 }
 
-test("posts the GUID once and displays formatted JSON safely", async () => {
+test("posts the GUID once and renders results as safe table text", async () => {
   const results = { score: 0.75, details: "<script>alert(1)</script>" };
   const benchmark = startBenchmark(() => ({ ok: true, json: async () => results }));
   assert.equal(benchmark.requests.length, 1);
@@ -75,7 +90,12 @@ test("posts the GUID once and displays formatted JSON safely", async () => {
 
   await benchmark.finish();
 
-  assert.equal(benchmark.elements["benchmark-json"].textContent, JSON.stringify(results, null, 2));
+  const table = benchmark.elements["benchmark-table"];
+  assert.equal(descendants(table, "dl").length, 1);
+  assert.deepEqual(descendants(table, "dt").map(text), ["Score", "Details"]);
+  assert.match(text(table), /0\.75/);
+  assert.match(text(table), /<script>alert\(1\)<\/script>/);
+  assert.equal(descendants(table, "script").length, 0);
   assert.equal(benchmark.elements["benchmark-results"].hidden, false);
   assert.equal(benchmark.elements["benchmark-error"].hidden, true);
   assertFinished(benchmark);
@@ -147,4 +167,230 @@ test("does nothing when the page has no benchmark element", async () => {
     fetch: () => assert.fail("Must not request a benchmark on another page"),
     setInterval: () => assert.fail("Must not start a timer on another page")
   });
+});
+
+
+test("aligns record arrays by field, including missing values and nested results", async () => {
+  const results = { checks: [
+    { test_name: "Findable", passed: true, score: 0 },
+    { test_name: "Reusable", passed: false, details: { reason: "Missing metadata" } }
+  ] };
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => results }));
+  await benchmark.finish();
+  const tables = descendants(benchmark.elements["benchmark-table"], "table");
+  assert.equal(tables.length, 1);
+  const headers = descendants(tables[0].children[1], "th").map(text);
+  assert.deepEqual(headers, ["#", "Test name", "Passed", "Score", "Details"]);
+  const rows = tables[0].children[2].children.filter(row => row.className === "result-summary-row");
+  assert.deepEqual(rows[0].children.map(text), ["1", "Findable", "Yes", "0", "Show details"]);
+  assert.deepEqual(rows[1].children.slice(0, 4).map(text), ["2", "Reusable", "No", "Not provided"]);
+  assert.match(text(tables[0]), /Missing metadata/);
+  assertFinished(benchmark);
+});
+
+test("renders empty responses and absent values clearly", async () => {
+  for (const [value, expected] of [[{}, "No results returned"], [[], "No items returned"], [null, "Not provided"], ["", "Empty"]]) {
+    const benchmark = startBenchmark(() => ({ ok: true, json: async () => value }));
+    await benchmark.finish();
+    assert.equal(text(benchmark.elements["benchmark-table"]), expected);
+    assert.equal(benchmark.elements["benchmark-results"].hidden, false);
+  }
+});
+
+test("preserves mixed arrays, numbers and literal HTML without executing it", async () => {
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => [0, false, null, "<img src=x onerror=alert(1)>", ["nested"]] }));
+  await benchmark.finish();
+  const table = benchmark.elements["benchmark-table"];
+  assert.match(text(table), /0/);
+  assert.match(text(table), /No/);
+  assert.match(text(table), /Not provided/);
+  assert.match(text(table), /<img src=x onerror=alert\(1\)>/);
+  assert.match(text(table), /nested/);
+  assert.equal(descendants(table, "img").length, 0);
+});
+
+
+test("collapses nested results and lengthy values without discarding their content", async () => {
+  const longValue = "Detailed assessment information. ".repeat(30);
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => ({ description: longValue, checks: [{ name: "Example", passed: true }] }) }));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const disclosures = descendants(root, "details");
+  assert.equal(disclosures.length, 2);
+  assert.ok(disclosures.every(item => !item.open));
+  assert.match(text(disclosures[0].children[0]), /Read full value/);
+  assert.ok(text(disclosures[0]).includes(longValue));
+  assert.match(text(disclosures[1].children[0]), /Checks · 1 item/);
+  assert.match(benchmark.elements["benchmark-status"].textContent, /Assessment complete/);
+});
+
+test("paginates large result sets and searches across all pages and hidden details", async () => {
+  const values = Array.from({ length: 25 }, (_, index) => ({ name: `Check ${index + 1}`, passed: index % 2 === 0, details: { explanation: index === 22 ? "Unique matching evidence" : "Other evidence" } }));
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => values }));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const collection = root.children[0];
+  const search = descendants(collection, "input")[0];
+  const buttons = descendants(collection, "button").filter(button => ["Previous", "Next"].includes(button.textContent));
+  const status = descendants(collection, "span").find(item => item.role === "status");
+  const body = descendants(collection, "table")[0].children[2];
+  assert.equal(body.children.filter(row => row.className === "result-summary-row").length, 10);
+  assert.match(status.textContent, /Showing 1–10 of 25/);
+  assert.equal(buttons[0]["aria-disabled"], "true");
+  const firstDetailButton = descendants(body, "button")[0];
+  const firstDetailRow = body.children[1];
+  firstDetailButton.listeners.click();
+  assert.equal(firstDetailRow.hidden, false);
+  buttons[1].listeners.click();
+  assert.match(status.textContent, /Showing 11–20 of 25/);
+  buttons[1].listeners.click();
+  assert.equal(body.children.filter(row => row.className === "result-summary-row").length, 5);
+  assert.equal(buttons[1]["aria-disabled"], "true");
+  buttons[1].listeners.click();
+  assert.equal(body.children.filter(row => row.className === "result-summary-row").length, 5);
+  buttons[0].listeners.click();
+  assert.match(status.textContent, /Showing 11–20 of 25/);
+  search.value = "unique MATCHING";
+  search.listeners.input();
+  assert.equal(body.children.filter(row => row.className === "result-summary-row").length, 1);
+  assert.match(text(body), /Check 23/);
+  assert.match(status.textContent, /Showing 1–1 of 1/);
+  search.value = "does not exist";
+  search.listeners.input();
+  assert.equal(body.children.length, 0);
+  assert.equal(status.textContent, "0 matching results");
+  search.value = "";
+  search.listeners.input();
+  assert.equal(body.children.filter(row => row.className === "result-summary-row").length, 10);
+  assert.match(status.textContent, /Showing 1–10 of 25/);
+  assert.equal(body.children[1], firstDetailRow);
+  assert.equal(firstDetailRow.hidden, false, "Expanded details survive paging and searching");
+  firstDetailButton.listeners.click();
+  assert.equal(firstDetailRow.hidden, true);
+});
+
+test("keeps wide records compact while preserving every field in details", async () => {
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => [{ name: "Example", passed: false, score: 0, description: "Evidence", reference: "reference-id", extra: "Extra data" }] }));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const table = descendants(root, "table")[0];
+  assert.equal(table.children[1].children[0].children.length, 5);
+  const detailRow = descendants(root, "tr").find(row => row.className === "result-expanded-row");
+  assert.ok(detailRow);
+  assert.equal(detailRow.children[0].colSpan, 5);
+  assert.equal(detailRow.hidden, true);
+  assert.match(text(detailRow), /Evidence/);
+  assert.match(text(detailRow), /reference-id/);
+  assert.match(text(detailRow), /Extra data/);
+  const button = descendants(root, "button")[0];
+  assert.equal(button["aria-controls"], detailRow.children[0].children[0].id);
+  button.listeners.click();
+  assert.equal(detailRow.hidden, false);
+  assert.equal(button["aria-expanded"], "true");
+  button.listeners.click();
+  assert.equal(detailRow.hidden, true);
+  assert.equal(button["aria-expanded"], "false");
+});
+
+
+test("renders success and failure guidance outside narrow table columns", async () => {
+  const benchmark = startBenchmark(() => ({ok:true, json:async () => ({checks:[{
+    name:"F3", score:0.25, passed:true,
+    success:"PASS: 25% compliance reached for F3.",
+    failure:"FAIL: 25% compliance not yet reached for F3.", guidance:null
+  }]})}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  assert.equal(descendants(root, "table").length, 1, "No table is nested inside a details column");
+  const detailRow = descendants(root, "tr").find(row => row.className === "result-expanded-row");
+  assert.equal(detailRow.children[0].colSpan, 5);
+  assert.deepEqual(descendants(detailRow, "dt").map(text), ["Success", "Failure", "Guidance"]);
+  assert.match(text(detailRow), /PASS: 25% compliance reached for F3/);
+  assert.match(text(detailRow), /FAIL: 25% compliance not yet reached for F3/);
+});
+
+test("global expand and collapse covers nested values and other result pages", async () => {
+  const checks = Array.from({length: 12}, (_, index) => ({name:`Check ${index + 1}`, passed:true, score:1, evidence:"Long evidence. ".repeat(30)}));
+  const benchmark = startBenchmark(() => ({ok:true, json:async () => ({checks})}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const [expand, collapse] = benchmark.elements["benchmark-expand-controls"].children[0].children;
+  assert.equal(expand["aria-controls"], root.id);
+  expand.listeners.click();
+  assert.ok(descendants(root, "details").every(node => node.open));
+  assert.ok(descendants(root, "tr").filter(node => node.className === "result-expanded-row").every(node => !node.hidden));
+  const next = descendants(root, "button").find(node => node.textContent === "Next");
+  next.listeners.click();
+  let rows = descendants(root, "tr").filter(node => node.className === "result-expanded-row");
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every(node => !node.hidden), "Other pages must also be expanded");
+  assert.ok(descendants(root, "details").every(node => node.open));
+  const search = descendants(root, "input")[0];
+  search.value = "no matches";
+  search.listeners.input();
+  collapse.listeners.click();
+  search.value = "Check 12";
+  search.listeners.input();
+  rows = descendants(root, "tr").filter(node => node.className === "result-expanded-row");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].hidden, true, "Filtered results must also be collapsed");
+  assert.ok(descendants(root, "details").every(node => !node.open));
+  assert.match(benchmark.elements["benchmark-status"].textContent, /all details collapsed/);
+});
+
+test("section controls sit above the title and affect only their section", async () => {
+  const benchmark = startBenchmark(() => ({ok:true, json:async () => ({
+    first: { nested: { evidence: "First evidence. ".repeat(30) } },
+    second: { nested: { evidence: "Second evidence. ".repeat(30) } }
+  })}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const firstSection = root.children[0].children[0].children[1].children[0];
+  const secondSection = root.children[0].children[1].children[1].children[0];
+  const first = descendants(firstSection, "details")[0];
+  const second = descendants(secondSection, "details")[0];
+  const [expand, collapse] = firstSection.children[0].children;
+  assert.equal(firstSection.children[0].role, "group");
+  assert.equal(firstSection.children[1], first, "Controls precede the section title and remain outside its disclosure");
+  assert.equal(expand["aria-controls"], first.id);
+  const sectionGroups = descendants(root).filter(node => node.role === "group");
+  assert.equal(sectionGroups.length, 2, "Only main sections have bulk controls");
+  assert.equal(descendants(first, "button").length, 0, "Nested sections retain their summaries without repeated bulk buttons");
+  expand.listeners.click();
+  assert.ok(descendants(first, "details").every(node => node.open));
+  assert.ok(descendants(second, "details").every(node => !node.open));
+  collapse.listeners.click();
+  assert.equal(first.open, false);
+  assert.ok(descendants(first, "details").every(node => !node.open));
+  assert.ok(descendants(second, "details").every(node => !node.open));
+});
+
+test("active expansion buttons reflect collapsed, expanded and manually mixed states", async () => {
+  const benchmark = startBenchmark(() => ({ok:true, json:async () => ({
+    first:{nested:{evidence:"Example evidence"}}, second:{value:1}
+  })}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const [expandAll, collapseAll] = benchmark.elements["benchmark-expand-controls"].children[0].children;
+  assert.equal(expandAll["aria-pressed"], "false");
+  assert.equal(collapseAll["aria-pressed"], "true");
+  const firstSection = root.children[0].children[0].children[1].children[0];
+  const [expandFirst, collapseFirst] = firstSection.children[0].children;
+  expandFirst.listeners.click();
+  assert.equal(expandFirst["aria-pressed"], "true");
+  assert.equal(collapseFirst["aria-pressed"], "false");
+  assert.equal(expandAll["aria-pressed"], "false");
+  assert.equal(collapseAll["aria-pressed"], "false");
+  const nested = descendants(firstSection, "details")[1];
+  nested.open = false;
+  nested.listeners.toggle();
+  assert.equal(expandFirst["aria-pressed"], "false");
+  assert.equal(collapseFirst["aria-pressed"], "false");
+  expandAll.listeners.click();
+  assert.equal(expandAll["aria-pressed"], "true");
+  assert.equal(collapseAll["aria-pressed"], "false");
+  collapseAll.listeners.click();
+  assert.equal(expandAll["aria-pressed"], "false");
+  assert.equal(collapseAll["aria-pressed"], "true");
+  assert.equal(collapseFirst["aria-pressed"], "true");
 });

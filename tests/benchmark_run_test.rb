@@ -14,7 +14,12 @@ class BenchmarkRunTest < AppTestCase
     end
 
     assert last_response.ok?
-    assert_includes last_response.body, 'src="/js/benchmark.js" defer'
+    script_version = Digest::SHA256.file(File.expand_path("../public/js/benchmark.js", __dir__)).hexdigest[0, 12]
+    style_version = Digest::SHA256.file(File.expand_path("../public/css/custom.css", __dir__)).hexdigest[0, 12]
+    assert_includes last_response.body, "src=\"/js/benchmark.js?v=#{script_version}\" defer"
+    assert_includes last_response.body, "href=\"/css/custom.css?v=#{style_version}\""
+    assert_includes last_response.body, 'id="benchmark-table"'
+    refute_includes last_response.body, 'id="benchmark-json"'
     assert_includes last_response.body, 'id="benchmark-loading"'
     assert_includes last_response.body, Rack::Utils.escape_html(@guid)
   end

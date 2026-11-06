@@ -1,32 +1,53 @@
-<h2 class="mb-4"><%= Rack::Utils.escape_html(@config[:title]) %></h2>
+<header class="page-heading mb-4">
+  <p class="eyebrow mb-3">Resource assessment</p>
+  <h1 class="display-6 fw-semibold mb-2"><%= Rack::Utils.escape_html(@config[:title]) %></h1>
+  <p class="text-body-secondary">Your resource and benchmark results, in one place.</p>
+</header>
 
 <% if @error %>
   <div class="alert alert-danger" role="alert"><%= Rack::Utils.escape_html(@error) %></div>
 <% else %>
   <div id="benchmark" data-endpoint="/<%= Rack::Utils.escape_html(@operation) %>/run"
        data-guid="<%= Rack::Utils.escape_html(@guid) %>" aria-busy="false">
-    <div class="card shadow-sm mb-4">
-      <div class="card-body">
-        <p>Running benchmark at <%= Rack::Utils.escape_html(@config[:calculation_uri]) %></p>
-        <p>On: <%= Rack::Utils.escape_html(@guid) %></p>
+    <div class="card benchmark-card mb-4">
+      <div class="card-body p-4">
+        <details class="assessment-details">
+          <summary class="fw-semibold">Assessment details</summary>
+        <dl class="row mt-3 mb-0">
+          <dt class="col-md-3 small text-body-secondary mb-2">Resource GUID</dt>
+          <dd class="col-md-9 text-break mb-3"><%= Rack::Utils.escape_html(@guid) %></dd>
+          <dt class="col-md-3 small text-body-secondary mb-2">Benchmark definition</dt>
+          <dd class="col-md-9 text-break mb-0"><%= Rack::Utils.escape_html(@config[:calculation_uri]) %></dd>
+        </dl>
+        </details>
         <div id="benchmark-loading" role="status" hidden>
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-          Running benchmark…
-          <span id="benchmark-waiting">waiting for champion — 0 seconds elapsed</span>
+          <div class="assessment-progress d-flex align-items-center gap-3 mt-4 p-3 rounded-3">
+            <span class="spinner-border spinner-border-sm flex-shrink-0" aria-hidden="true"></span>
+            <div><span class="fw-semibold d-block">Running benchmark…</span>
+              <span id="benchmark-waiting" class="small" aria-live="off">waiting for champion — 0 seconds elapsed</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
+    <p id="benchmark-status" class="small text-body-secondary" role="status" aria-atomic="true"></p>
     <div id="benchmark-error" class="alert alert-danger" role="alert" hidden></div>
-    <div id="benchmark-results" class="card shadow-sm" aria-live="polite" hidden>
-      <div class="card-header">Results</div>
-      <div class="card-body"><pre id="benchmark-json" class="mb-0"></pre></div>
+    <div id="benchmark-results" class="card benchmark-card" hidden>
+      <div class="card-header bg-white p-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <h2 class="h5 mb-0">Benchmark results</h2>
+        <div id="benchmark-expand-controls"></div>
+      </div>
+      <div class="card-body p-4">
+        <p class="small text-body-secondary mb-3">Expand a section to explore its results. Long lists show 10 items per page and can be searched.</p>
+        <div id="benchmark-table"></div>
+      </div>
     </div>
-    <noscript>JavaScript is required to run the benchmark.</noscript>
+    <noscript><p class="alert alert-warning">JavaScript is required to run the benchmark.</p></noscript>
   </div>
-  <script src="/js/benchmark.js" defer></script>
+  <script src="<%= asset_path('/js/benchmark.js') %>" defer></script>
 <% end %>
 
 <form action="/" method="get">
-  <button type="submit" class="btn btn-secondary mt-4">home</button>
+  <button type="submit" class="btn btn-outline-secondary mt-4 action-label">home</button>
 </form>
