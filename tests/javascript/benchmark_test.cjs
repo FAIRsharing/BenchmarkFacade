@@ -43,6 +43,7 @@ function startBenchmark(response) {
   const context = {
     document: { getElementById: id => elements[id], createElement: element },
     URLSearchParams,
+    URL,
     performance: { now: () => elapsed },
     setInterval(callback, delay) {
       assert.equal(delay, 1000);
@@ -393,4 +394,84 @@ test("active expansion buttons reflect collapsed, expanded and manually mixed st
   assert.equal(expandAll["aria-pressed"], "false");
   assert.equal(collapseAll["aria-pressed"], "true");
   assert.equal(collapseFirst["aria-pressed"], "true");
+});
+
+test("renders keyed test results as searchable paginated rows with full-width log details", async () => {
+  const testResults = Object.fromEntries(Array.from({length:26}, (_, index) => [
+    `ft_test_${index + 1}`, {log:index === 25 ? "Unique final evidence" : "No matching record found.", result:"indeterminate", weight:0}
+  ]));
+  const benchmark = startBenchmark(() => ({ok:true, json:async () => ({test_results:testResults})}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const table = descendants(root,"table")[0];
+  assert.ok(table);
+  assert.deepEqual(table.children[1].children[0].children.map(text), ["#","Test","Result","Weight","Details"]);
+  const body = table.children[2];
+  const summaries = () => body.children.filter(row => row.className === "result-summary-row");
+  assert.equal(summaries().length,10);
+  assert.deepEqual(summaries()[0].children.map(text), ["1","ft_test_1","indeterminate","0","Show details"]);
+  const search = descendants(root,"input")[0];
+  search.value = "Unique final evidence";
+  search.listeners.input();
+  assert.equal(summaries().length,1);
+  assert.match(text(summaries()[0]),/ft_test_26/);
+  const detail = descendants(root,"tr").find(row => row.className === "result-expanded-row");
+  assert.equal(detail.children[0].colSpan,5);
+  descendants(summaries()[0],"button")[0].listeners.click();
+  assert.equal(detail.hidden,false);
+  assert.match(text(detail),/Unique final evidence/);
+  assert.match(text(descendants(root,"summary")[0]),/Test results · 26 tests/);
+  benchmark.elements["benchmark-expand-controls"].children[0].children[1].listeners.click();
+  assert.equal(detail.hidden,true);
+});
+
+test("preserves extra fields and unusual entries in a test-results map", async () => {
+  const benchmark = startBenchmark(() => ({ok:true,json:async () => ({test_results:{
+    example:{result:false,weight:0,log:"<script>unsafe()</script>",guidance:{message:"More evidence"}},
+    missing:null,
+    scalar:"not evaluated"
+  }})}));
+  await benchmark.finish();
+  const root = benchmark.elements["benchmark-table"];
+  const rows=descendants(root,"tr").filter(row => row.className === "result-summary-row");
+  assert.match(text(rows[0]),/No/);
+  assert.match(text(rows[1]),/Not provided/);
+  assert.match(text(rows[2]),/not evaluated/);
+  assert.match(text(root),/More evidence/);
+  assert.match(text(root),/<script>unsafe\(\)<\/script>/);
+  assert.equal(descendants(root,"script").length,0);
+});
+
+
+test("renders HTTP and HTTPS URLs as safe new-tab links in result values", async () => {
+  const benchmark = startBenchmark(() => ({ok:true,json:async () => ({
+    website:"https://example.org/resource?a=1&b=2#section",
+    details:"See (http://example.org/first), then https://example.org/second.",
+    nested:{reference:"https://example.org/path_(part)"},
+    unsafe:"javascript:alert(1) <img src=x onerror=alert(1)> https://[invalid]"
+  })}));
+  await benchmark.finish();
+  const root=benchmark.elements["benchmark-table"];
+  const links=descendants(root,"a");
+  assert.deepEqual(links.map(link=>link.href), [
+    "https://example.org/resource?a=1&b=2#section", "http://example.org/first",
+    "https://example.org/second", "https://example.org/path_(part)"
+  ]);
+  for (const link of links) {
+    assert.equal(link.target,"_blank");
+    assert.equal(link.rel,"noopener noreferrer");
+    assert.match(link["aria-label"],/opens in a new tab/);
+  }
+  assert.equal(descendants(root,"img").length,0);
+  assert.match(text(root),/javascript:alert/);
+});
+
+test("keeps long URLs clickable inside expanded values and test-result identifiers", async () => {
+  const address="https://example.org/" + "long-resource-".repeat(30);
+  const benchmark=startBenchmark(()=>({ok:true,json:async()=>({
+    reference:address, test_results:{"https://example.org/test/1":{result:"pass",weight:1}}
+  })}));
+  await benchmark.finish();
+  const links=descendants(benchmark.elements["benchmark-table"],"a");
+  assert.deepEqual(links.map(link=>link.href),[address,"https://example.org/test/1"]);
 });

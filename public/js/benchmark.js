@@ -13,6 +13,41 @@ function resultElement(tag, text, className) {
   return element;
 }
 
+function resultText(text, className = "result-value") {
+  const content = resultElement("span", undefined, className);
+  const matches = [...text.matchAll(/https?:\/\/[^\s<>"']+/gi)];
+  if (!matches.length) {
+    content.textContent = text;
+    return content;
+  }
+  let offset = 0;
+  for (const match of matches) {
+    let address = match[0].replace(/[.,;!?]+$/, "");
+    for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
+      while (address.endsWith(close) && address.split(close).length > address.split(open).length) {
+        address = address.slice(0, -1);
+      }
+    }
+    content.append(resultElement("span", text.slice(offset, match.index)));
+    try {
+      const url = new URL(address);
+      if (!["http:", "https:"].includes(url.protocol) || !url.hostname) throw new Error("Invalid URL");
+      const link = resultElement("a", address);
+      link.setAttribute("href", address);
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+      link.setAttribute("aria-label", `${address} (opens in a new tab)`);
+      link.setAttribute("title", "Opens in a new tab");
+      content.append(link);
+    } catch {
+      content.append(resultElement("span", address));
+    }
+    offset = match.index + address.length;
+  }
+  content.append(resultElement("span", text.slice(offset)));
+  return content;
+}
+
 function setResultsExpanded(root, expanded) {
   if (root.setResultsExpanded) {
     root.setResultsExpanded(expanded);
@@ -222,9 +257,10 @@ function resultDisclosure(label, content, sectionLabel) {
 }
 
 function renderResult(value, caption = "Benchmark results", depth = 0, sectionLevel = 0) {
+  const testResults = caption.replace(/[\s_-]/g, "").toLowerCase() === "testresults";
   if (depth > 0 && value && typeof value === "object" && Object.keys(value).length) {
     const count = Object.keys(value).length;
-    const noun = Array.isArray(value) ? "item" : "field";
+    const noun = testResults ? "test" : Array.isArray(value) ? "item" : "field";
     return resultDisclosure(`${caption} · ${count} ${noun}${count === 1 ? "" : "s"}`,
       renderResult(value, caption, 0, sectionLevel + 1), sectionLevel === 0 ? caption : undefined);
   }
@@ -266,6 +302,29 @@ function renderResult(value, caption = "Benchmark results", depth = 0, sectionLe
   if (typeof value === "object") {
     const entries = Object.entries(value);
     if (!entries.length) return resultElement("span", "No results returned", "text-body-secondary");
+    if (testResults) {
+      const rows = entries.map(([test, result], index) => {
+        const record = result !== null && typeof result === "object" && !Array.isArray(result);
+        const row = [
+          resultElement("span", String(index + 1)),
+          resultText(test),
+          renderResult(record ? result.result : result, "Result", 1, sectionLevel + 1),
+          renderResult(record ? result.weight : null, "Weight", 1, sectionLevel + 1)
+        ];
+        const fields = record ? Object.entries(result).filter(([key]) => !["result", "weight"].includes(key)) : [];
+        if (fields.length) {
+          row.push(resultElement("button", "Show details", "btn btn-outline-secondary btn-sm result-details-toggle"));
+          row[row.length - 1].type = "button";
+          row.detailsLabel = `Details for ${test}`;
+          row.details = renderResult(Object.fromEntries(fields), row.detailsLabel, 0, sectionLevel + 1);
+        } else {
+          row.push(resultElement("span", "No additional details", "text-body-secondary"));
+        }
+        return row;
+      });
+      return resultTable(["#", "Test", "Result", "Weight", "Details"], rows, caption,
+        entries.map(([test, result]) => `${test} ${JSON.stringify(result)}`));
+    }
     const list = resultElement("dl", undefined, "result-fields-list mb-0");
     for (const [key, item] of entries) {
       const complex = item !== null && typeof item === "object";
@@ -278,9 +337,12 @@ function renderResult(value, caption = "Benchmark results", depth = 0, sectionLe
     return list;
   }
   const text = value === "" ? "Empty" : String(value);
-  const content = resultElement("span", text, "result-value");
+  const content = resultText(text);
   if (text.length > 180) {
-    return resultDisclosure(`${text.slice(0, 100)}… — Read full value`, content);
+    const preview = /https?:\/\//i.test(text)
+      ? `${caption} — Read full text and links`
+      : `${text.slice(0, 100)}… — Read full value`;
+    return resultDisclosure(preview, content);
   }
   return content;
 }

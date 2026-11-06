@@ -22,6 +22,9 @@ class BenchmarkRunTest < AppTestCase
     refute_includes last_response.body, 'id="benchmark-json"'
     assert_includes last_response.body, 'id="benchmark-loading"'
     assert_includes last_response.body, Rack::Utils.escape_html(@guid)
+    [@guid, BENCHMARKS["institutional_benchmark"][:calculation_uri]].each do |url|
+      assert_includes last_response.body, "href=\"#{Rack::Utils.escape_html(url)}\" target=\"_blank\" rel=\"noopener noreferrer\""
+    end
   end
 
   def test_invalid_guid_does_not_start_a_benchmark

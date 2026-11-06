@@ -15,9 +15,9 @@
           <summary class="fw-semibold">Assessment details</summary>
         <dl class="row mt-3 mb-0">
           <dt class="col-md-3 small text-body-secondary mb-2">Resource GUID</dt>
-          <dd class="col-md-9 text-break mb-3"><%= Rack::Utils.escape_html(@guid) %></dd>
+          <dd class="col-md-9 text-break mb-3"><a href="<%= Rack::Utils.escape_html(@guid) %>" target="_blank" rel="noopener noreferrer" title="Opens in a new tab"><%= Rack::Utils.escape_html(@guid) %><span class="visually-hidden"> (opens in a new tab)</span></a></dd>
           <dt class="col-md-3 small text-body-secondary mb-2">Benchmark definition</dt>
-          <dd class="col-md-9 text-break mb-0"><%= Rack::Utils.escape_html(@config[:calculation_uri]) %></dd>
+          <dd class="col-md-9 text-break mb-0"><a href="<%= Rack::Utils.escape_html(@config[:calculation_uri]) %>" target="_blank" rel="noopener noreferrer" title="Opens in a new tab"><%= Rack::Utils.escape_html(@config[:calculation_uri]) %><span class="visually-hidden"> (opens in a new tab)</span></a></dd>
         </dl>
         </details>
         <div id="benchmark-loading" role="status" hidden>
