@@ -1,11 +1,45 @@
+/**
+ * Benchmark results UI for views/run_benchmark.erb.
+ *
+ * runBenchmark() posts the page's GUID to the local Sinatra endpoint, then
+ * renderResult() builds tables, field lists and expandable details from JSON.
+ * Renderers use textContent for API text; resultText() adds validated HTTP(S)
+ * links without interpreting returned text as HTML.
+ *
+ * Expandable elements may implement setResultsExpanded(expanded) and
+ * resultExpansionState(). These hooks let bulk controls include detached rows
+ * on other pages and rows excluded by search, as well as native <details>.
+ *
+ * @typedef {{open: number, total: number}} ExpansionState
+ * @typedef {Array<HTMLElement> & {
+ *   details?: HTMLElement,
+ *   detailsLabel?: string,
+ *   rendered?: HTMLTableRowElement[]
+ * }} ResultRow
+ */
+
+// Shared counter for unique disclosure IDs referenced by aria-controls.
 let resultDetailId = 0;
+// Current result view's bulk controls; reset before rendering a new response.
 let resultControlGroups = [];
 
+/**
+ * Convert camelCase, snake_case or hyphenated keys into readable field labels.
+ * @param {string} key
+ * @returns {string}
+ */
 function resultLabel(key) {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ")
     .replace(/^./, character => character.toUpperCase());
 }
 
+/**
+ * Create an element with optional plain text and CSS classes.
+ * @param {string} tag - HTML tag name.
+ * @param {string} [text] - Assigned through textContent, never innerHTML.
+ * @param {string} [className] - Space-separated CSS classes.
+ * @returns {HTMLElement}
+ */
 function resultElement(tag, text, className) {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = text;
@@ -13,6 +47,15 @@ function resultElement(tag, text, className) {
   return element;
 }
 
+/**
+ * Render text with HTTP(S) URLs as links that open in a new tab.
+ * Trailing prose punctuation and unmatched closing brackets stay outside links;
+ * malformed URLs stay as text. New-tab links include opener protection and an
+ * accessible label announcing that they open in a new tab.
+ * @param {string} text
+ * @param {string} [className="result-value"] - Classes for the wrapping span.
+ * @returns {HTMLSpanElement}
+ */
 function resultText(text, className = "result-value") {
   const content = resultElement("span", undefined, className);
   const matches = [...text.matchAll(/https?:\/\/[^\s<>"']+/gi)];
@@ -48,6 +91,13 @@ function resultText(text, className = "result-value") {
   return content;
 }
 
+/**
+ * Expand or collapse a result subtree, using custom hooks where available.
+ * A hook owns traversal of its contents, so its children are not visited twice.
+ * @param {HTMLElement} root
+ * @param {boolean} expanded
+ * @returns {void}
+ */
 function setResultsExpanded(root, expanded) {
   if (root.setResultsExpanded) {
     root.setResultsExpanded(expanded);
@@ -56,6 +106,12 @@ function setResultsExpanded(root, expanded) {
   for (const child of root.children) setResultsExpanded(child, expanded);
 }
 
+/**
+ * Count open and total disclosures in a subtree, including off-page rows when
+ * the subtree supplies its own state hook.
+ * @param {HTMLElement} root
+ * @returns {ExpansionState}
+ */
 function resultExpansionState(root) {
   if (root.resultExpansionState) return root.resultExpansionState();
   return [...root.children].reduce((state, child) => {
@@ -64,6 +120,11 @@ function resultExpansionState(root) {
   }, { open: 0, total: 0 });
 }
 
+/**
+ * Synchronize button highlights and aria-pressed with the current result state.
+ * Mixed states and subtrees without disclosures leave both buttons unselected.
+ * @returns {void}
+ */
 function refreshResultControls() {
   for (const { target, buttons } of resultControlGroups) {
     const state = resultExpansionState(target);
@@ -72,6 +133,13 @@ function refreshResultControls() {
   }
 }
 
+/**
+ * Build and register scoped Expand all / Collapse all buttons.
+ * Each action updates the target subtree, button states and live status text.
+ * @param {HTMLElement} target - Result subtree controlled by these buttons.
+ * @param {string} label - Scope name used in accessible labels and announcements.
+ * @returns {HTMLDivElement}
+ */
 function resultExpansionControls(target, label) {
   if (!target.id) target.id = `result-section-${++resultDetailId}`;
   const group = resultElement("div", undefined, "result-expansion-controls d-flex flex-wrap gap-2");
@@ -94,6 +162,22 @@ function resultExpansionControls(target, label) {
   return group;
 }
 
+/**
+ * Build a responsive table with optional full-width detail rows.
+ *
+ * Each ResultRow contains one element per column. If details is provided, the
+ * final element must be its Show details button; detailsLabel names the panel.
+ * Cached rendered rows preserve their expansion state across page changes.
+ *
+ * More than 10 records enables search and pagination. searchValues must align
+ * with rows and should include hidden detail text, so searches cover all data.
+ * Bulk expansion and state reporting cover every row, not only the visible page.
+ * @param {string[]} headers
+ * @param {ResultRow[]} rows
+ * @param {string} caption - Table caption and accessible region name.
+ * @param {string[]} [searchValues=[]] - Search text for each row.
+ * @returns {HTMLDivElement} Table wrapper, or a collection with search and paging.
+ */
 function resultTable(headers, rows, caption, searchValues = []) {
   const wrapper = resultElement("div", undefined, "table-responsive");
   wrapper.tabIndex = 0;
@@ -115,6 +199,12 @@ function resultTable(headers, rows, caption, searchValues = []) {
   head.append(heading);
   table.append(head);
   const body = resultElement("tbody");
+  /**
+   * Create or reuse a summary row and its optional full-width detail row.
+   * Reusing nodes retains listeners, panel IDs and expansion state after paging.
+   * @param {ResultRow} values
+   * @returns {HTMLTableRowElement[]}
+   */
   function tableRow(values) {
     if (values.rendered) return values.rendered;
     const row = resultElement("tr", undefined, "result-summary-row");
@@ -149,6 +239,7 @@ function resultTable(headers, rows, caption, searchValues = []) {
     button.setAttribute("aria-controls", detailId);
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("aria-label", `Show ${values.detailsLabel.toLowerCase()}`);
+    /** Keep this panel's visibility, button text and ARIA state in sync. */
     function setExpanded(open) {
       detailRow.hidden = !open;
       button.setAttribute("aria-expanded", String(open));
@@ -212,6 +303,7 @@ function resultTable(headers, rows, caption, searchValues = []) {
   const empty = resultElement("p", "No matching results. Try a different search.", "text-body-secondary py-3 mb-0");
   let page = 0;
   let matches = rows.map((_, index) => index);
+  /** Render the current filtered page and refresh its navigation/status text. */
   function update() {
     const start = page * 10;
     body.replaceChildren(...matches.slice(start, start + 10).flatMap(index => tableRow(rows[index])));
@@ -237,6 +329,15 @@ function resultTable(headers, rows, caption, searchValues = []) {
   return section;
 }
 
+/**
+ * Wrap content in a native, keyboard-accessible details/summary disclosure.
+ * Supplying sectionLabel adds bulk controls above the disclosure, where they
+ * remain available even when the section is collapsed.
+ * @param {string} label - Text shown in the disclosure summary.
+ * @param {HTMLElement} content
+ * @param {string} [sectionLabel] - Main-section name for its bulk controls.
+ * @returns {HTMLElement} A details element or a section wrapper with controls.
+ */
 function resultDisclosure(label, content, sectionLabel) {
   const details = resultElement("details", undefined, "result-disclosure");
   details.append(resultElement("summary", label));
@@ -256,6 +357,22 @@ function resultDisclosure(label, content, sectionLabel) {
   return section;
 }
 
+/**
+ * Recursively choose a readable presentation for a JSON value.
+ *
+ * Record arrays show up to three short fields and move remaining fields into
+ * full-width detail panels. Keyed "test_results" objects use a dedicated table
+ * with Test, Result, Weight and Details columns. Other objects use field lists;
+ * booleans use badges, and long strings use expandable, linked text.
+ *
+ * @param {*} value - JSON value from the benchmark response.
+ * @param {string} [caption="Benchmark results"] - Field/section display name.
+ * @param {number} [depth=0] - Positive values wrap nonempty objects/arrays in a
+ * disclosure. Rendering its contents resets depth to avoid wrapping it again.
+ * @param {number} [sectionLevel=0] - Tracks nesting independently of depth; only
+ * main sections receive bulk controls, avoiding repeated buttons inside them.
+ * @returns {HTMLElement}
+ */
 function renderResult(value, caption = "Benchmark results", depth = 0, sectionLevel = 0) {
   const testResults = caption.replace(/[\s_-]/g, "").toLowerCase() === "testresults";
   if (depth > 0 && value && typeof value === "object" && Object.keys(value).length) {
@@ -347,6 +464,15 @@ function renderResult(value, caption = "Benchmark results", depth = 0, sectionLe
   return content;
 }
 
+/**
+ * Run the assessment once when this script loads on a benchmark page.
+ * Reads endpoint and guid from #benchmark's data attributes, posts to the local
+ * endpoint and renders its JSON response. Manages the elapsed-time indicator,
+ * busy state, result controls and error/status messages. Always clears the timer
+ * and busy state, including HTTP, network, parsing and rendering failures.
+ * Does nothing on pages without #benchmark.
+ * @returns {Promise<void>}
+ */
 async function runBenchmark() {
   const benchmark = document.getElementById("benchmark");
   if (!benchmark) return;
