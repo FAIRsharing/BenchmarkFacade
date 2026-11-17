@@ -1,6 +1,7 @@
 require "sinatra"
 require "json"
 require "uri"
+require "digest"
 require_relative "config/benchmarks"
 require_relative "services/champion_client"
 
@@ -80,6 +81,12 @@ class BenchmarkFacade < Sinatra::Base
   end
 
   helpers do
+    def asset_path(path)
+      file = File.join(settings.public_folder, path.delete_prefix("/"))
+      version = Digest::SHA256.file(file).hexdigest[0, 12]
+      "#{path}?v=#{version}"
+    end
+
     def valid_url?(value)
       return false unless value.is_a?(String)
 

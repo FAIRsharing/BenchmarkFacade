@@ -1,16 +1,41 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Run benchmark</title>
-  </head>
-  <body>
-    <p>Later, some radio buttons to select the benchmark can be added here.</p>
+<header class="page-heading mb-4 mb-md-5">
+  <p class="eyebrow mb-3">Resource assessment</p>
+  <h1 class="display-5 fw-semibold mb-3">Start with a resource.<br>Discover its FAIR results.</h1>
+  <p class="lead text-body-secondary mb-0">Run an institutional benchmark on your resource using FAIR Champion.</p>
+</header>
 
-    <form action="/institutional_benchmark" method="get">
-      <label for="guid">GUID on which to run benchmark</label>
-      <input type="text" id="guid" name="guid">
-      <button type="submit">run benchmark</button>
-    </form>
-  </body>
-</html>
+<div class="row g-4 g-xl-5 align-items-start">
+  <div class="col-lg-8">
+    <section class="card benchmark-card" aria-labelledby="assessment-title">
+      <div class="card-body p-4 p-md-5">
+        <span class="badge rounded-pill text-bg-light border mb-3">Institutional Benchmark</span>
+        <h2 id="assessment-title" class="h4 mb-2">Assess your resource</h2>
+        <p class="text-body-secondary mb-4">Enter the full URL of the resource you want to evaluate.</p>
+        <form action="/institutional_benchmark" method="get">
+          <label for="guid" class="form-label fw-semibold">GUID on which to run benchmark</label>
+          <input type="text" id="guid" name="guid" class="form-control form-control-lg"
+                 placeholder="https://…" aria-describedby="guid-help" required>
+          <div id="guid-help" class="form-text mt-2">Use a complete HTTP or HTTPS resource URL as the GUID.</div>
+          <button type="submit" class="btn btn-primary btn-lg mt-4 action-label">run benchmark</button>
+        </form>
+      </div>
+    </section>
+  </div>
+  <aside class="col-lg-4 pt-lg-3" aria-labelledby="how-it-works">
+    <h2 id="how-it-works" class="h5 mb-4">How it works</h2>
+    <ol class="list-unstyled workflow mb-0">
+      <li class="d-flex gap-3 mb-4">
+        <span class="step-number" aria-hidden="true">1</span>
+        <div><h3 class="h6 mb-1">Choose your resource</h3><p class="small text-body-secondary mb-0">Copy the URL of the resource you want to assess.</p></div>
+      </li>
+      <li class="d-flex gap-3 mb-4">
+        <span class="step-number" aria-hidden="true">2</span>
+        <div><h3 class="h6 mb-1">Run the benchmark</h3><p class="small text-body-secondary mb-0">FAIR Champion evaluates the resource against the institutional benchmark.</p></div>
+      </li>
+      <li class="d-flex gap-3">
+        <span class="step-number" aria-hidden="true">3</span>
+        <div><h3 class="h6 mb-1">Explore the results</h3><p class="small text-body-secondary mb-0">View the assessment response when the benchmark finishes.</p></div>
+      </li>
+    </ol>
+  </aside>
+</div>

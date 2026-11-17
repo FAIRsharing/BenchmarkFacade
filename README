@@ -5,6 +5,25 @@ To setup:
 3. `gem install bundler` and then `bundle install`.
 4. `bundle exec rackup -E development -o 127.0.0.1 -p 4567`
 
+Open http://127.0.0.1:4567 in your browser. Stop the server with Ctrl+C.
+
+macOS: Ruby installation fails while compiling OpenSSL
+
+If Ruby 3.4.2 fails to compile and make.log mentions OpenSSL 4 headers or
+"incomplete definition of type", explicitly select Homebrew's OpenSSL 3:
+
+    brew install openssl@3 libyaml readline zlib
+    source "$HOME/.rvm/scripts/rvm"
+    rvm install ruby-3.4.2 --with-openssl-dir="$(brew --prefix openssl@3)" --with-opt-dir="$(brew --prefix openssl@3):$(brew --prefix libyaml):$(brew --prefix readline):$(brew --prefix zlib)" --autolibs=read-only
+    rvm use ruby-3.4.2@benchmark-facade --create
+    gem install bundler -v 4.0.24 --no-document
+    bundle install
+    bundle exec rackup -E development -o 127.0.0.1 -p 4567
+
+Run these commands from the app's directory. Use openssl@3 explicitly: the
+unversioned Homebrew openssl formula may point to OpenSSL 4. The Bundler version
+above matches Gemfile.lock.
+
 To run the tests and generate local coverage:
 
 1. Run `bundle exec rake test`.
