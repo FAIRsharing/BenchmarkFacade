@@ -37,20 +37,22 @@ class BenchmarkRunTest < AppTestCase
 
   def test_run_returns_json_from_the_configured_benchmark
     results = { "score" => 0.75, "checks" => [] }
-    client = lambda do |calculation_uri:, guid:, url:|
-      assert_equal BENCHMARKS["institutional_benchmark"][:calculation_uri], calculation_uri
-      assert_equal @guid, guid
-      assert_equal "https://champion.fairsharing.org/champion/assess/algorithm", url
-      results
-    end
+    BENCHMARKS.each do |operation, config|
+      client = lambda do |calculation_uri:, guid:, url:|
+        assert_equal config[:calculation_uri], calculation_uri
+        assert_equal @guid, guid
+        assert_equal "https://champion.fairsharing.org/champion/assess/algorithm", url
+        results
+      end
 
-    ChampionClient.stub(:call, client) do
-      post "/institutional_benchmark/run", guid: @guid
-    end
+      ChampionClient.stub(:call, client) do
+        post "/#{operation}/run", guid: @guid
+      end
 
-    assert last_response.ok?
-    assert_includes last_response.content_type, "application/json"
-    assert_equal results, JSON.parse(last_response.body)
+      assert last_response.ok?
+      assert_includes last_response.content_type, "application/json"
+      assert_equal results, JSON.parse(last_response.body)
+    end
   end
 
   def test_run_rejects_invalid_and_missing_guids_without_calling_the_api

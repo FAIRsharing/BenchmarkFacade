@@ -1,25 +1,26 @@
 <header class="page-heading mb-4 mb-md-5">
   <p class="eyebrow mb-3">Resource assessment</p>
   <h1 class="display-5 fw-semibold mb-3">Start with a resource.<br>Discover its FAIR results.</h1>
-  <p class="lead text-body-secondary mb-0">Run an institutional benchmark on your resource using FAIR Champion.</p>
+  <p class="lead text-body-secondary mb-0">Choose a benchmark and assess your resource using FAIR Champion.</p>
 </header>
 
 <div class="row g-4 g-xl-5 align-items-start">
   <div class="col-lg-8">
-    <section class="card benchmark-card" aria-labelledby="assessment-title">
+    <% @benchmarks.each do |operation, config| %>
+    <section class="card benchmark-card mb-4" aria-labelledby="<%= Rack::Utils.escape_html(operation) %>-title">
       <div class="card-body p-4 p-md-5">
-        <span class="badge rounded-pill text-bg-light border mb-3">Institutional Benchmark</span>
-        <h2 id="assessment-title" class="h4 mb-2">Assess your resource</h2>
-        <p class="text-body-secondary mb-4">Enter the full URL of the resource you want to evaluate.</p>
-        <form action="/institutional_benchmark" method="get">
-          <label for="guid" class="form-label fw-semibold">GUID on which to run benchmark</label>
-          <input type="text" id="guid" name="guid" class="form-control form-control-lg"
-                 placeholder="https://…" aria-describedby="guid-help" required>
-          <div id="guid-help" class="form-text mt-2">Use a complete HTTP or HTTPS resource URL as the GUID.</div>
+        <h2 id="<%= Rack::Utils.escape_html(operation) %>-title" class="h4 mb-2"><%= Rack::Utils.escape_html(config[:title]) %></h2>
+        <p class="text-body-secondary mb-4"><%= Rack::Utils.escape_html(config[:description]) %></p>
+        <form action="/<%= Rack::Utils.escape_html(operation) %>" method="get">
+          <label for="<%= Rack::Utils.escape_html(operation) %>-guid" class="form-label fw-semibold">GUID on which to run benchmark</label>
+          <input type="text" id="<%= Rack::Utils.escape_html(operation) %>-guid" name="guid" class="form-control form-control-lg"
+                 placeholder="https://…" aria-describedby="<%= Rack::Utils.escape_html(operation) %>-guid-help" required>
+          <div id="<%= Rack::Utils.escape_html(operation) %>-guid-help" class="form-text mt-2">Use a complete HTTP or HTTPS resource URL as the GUID.</div>
           <button type="submit" class="btn btn-primary btn-lg mt-4 action-label">run benchmark</button>
         </form>
       </div>
     </section>
+    <% end %>
   </div>
   <aside class="col-lg-4 pt-lg-3" aria-labelledby="how-it-works">
     <h2 id="how-it-works" class="h5 mb-4">How it works</h2>
@@ -30,7 +31,7 @@
       </li>
       <li class="d-flex gap-3 mb-4">
         <span class="step-number" aria-hidden="true">2</span>
-        <div><h3 class="h6 mb-1">Run the benchmark</h3><p class="small text-body-secondary mb-0">FAIR Champion evaluates the resource against the institutional benchmark.</p></div>
+        <div><h3 class="h6 mb-1">Run the benchmark</h3><p class="small text-body-secondary mb-0">FAIR Champion evaluates the resource against your chosen benchmark.</p></div>
       </li>
       <li class="d-flex gap-3">
         <span class="step-number" aria-hidden="true">3</span>
