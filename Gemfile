@@ -10,7 +10,8 @@ gem "rake"
 gem "sinatra-contrib", group: :development
 
 group :test do
-  gem "minitest", "~> 5.0"
+  gem "minitest", "~> 6.0"
+  gem "minitest-mock"
   gem "rack-test"
   gem "simplecov", require: false
 end
