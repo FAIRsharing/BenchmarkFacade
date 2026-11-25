@@ -1,0 +1,22 @@
+[build]
+  command = "bundle exec ruby scripts/build_netlify.rb"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+  BUNDLE_WITHOUT = "development:test"
+
+[functions]
+  node_bundler = "esbuild"
+
+[dev]
+  framework = "#static"
+  publish = "dist"
+  autoLaunch = false
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
