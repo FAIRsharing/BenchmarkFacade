@@ -33,7 +33,7 @@ For a fresh Netlify project:
 Do not deploy dist by drag-and-drop: that omits the function required to run
 assessments. Import the Git repository or deploy with the Netlify CLI instead.
 
-Local Netlify preview (after the Ruby setup below, with Node.js 22 on PATH):
+Local Netlify preview (after the Ruby setup below, with Node.js 24 on PATH):
 
     bundle exec ruby scripts/build_netlify.rb
     npx netlify-cli dev
