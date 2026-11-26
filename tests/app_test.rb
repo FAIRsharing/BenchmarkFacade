@@ -42,6 +42,22 @@ class AppTest < AppTestCase
     end
   end
 
+  def test_home_page_renders_the_configured_example_in_each_benchmark_form
+    get "/"
+
+    BENCHMARKS.each do |operation, config|
+      example_url = config[:example_url]
+      refute_nil example_url, "Expected an example URL for #{operation}"
+      assert URI.parse(example_url).is_a?(URI::HTTP), "Expected an HTTP(S) example URL"
+      form = last_response.body[/<form\b[^>]*action="\/#{Regexp.escape(operation)}"[^>]*>.*?<\/form>/m]
+      refute_nil form
+      assert_includes form, "data-example-url=\"#{Rack::Utils.escape_html(example_url)}\""
+      assert_includes form, "Try with example record"
+      assert_includes form, "data-clear-guid"
+    end
+    assert_match(/src="\/js\/examples\.js\?v=[a-f0-9]+"[^>]*defer/, last_response.body)
+  end
+
   def test_operation_page_displays_an_error_for_an_invalid_guid
     get "/institutional_benchmark", guid: "not-a-url"
 
