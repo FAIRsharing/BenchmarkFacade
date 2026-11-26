@@ -28,7 +28,7 @@ function text(node) {
 function startBenchmark(response) {
   const elements = Object.fromEntries([
     "benchmark", "benchmark-loading", "benchmark-waiting", "benchmark-error",
-    "benchmark-results", "benchmark-table", "benchmark-status", "benchmark-expand-controls"
+    "benchmark-results", "benchmark-table", "benchmark-status", "benchmark-expand-controls", "benchmark-summary"
   ].map(id => [id, element()]));
   elements.benchmark.dataset = {
     endpoint: "/institutional_benchmark/run",
@@ -76,6 +76,66 @@ function assertFinished(benchmark) {
   assert.equal(benchmark.elements["benchmark-loading"].hidden, true);
   assert.equal(benchmark.elements.benchmark["aria-busy"], "false");
 }
+
+test("summarizes all test outcomes with counts, percentages and an accessible chart", async () => {
+  const results = { test_results: Object.fromEntries([
+    "pass", " PASS ", "passed", "fail", "failed", "indeterminate", "error", "ERROR"
+  ].map((result, index) => [`test_${index}`, { result, weight: index * 100 }])) };
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => results }));
+  await benchmark.finish();
+  const summary = benchmark.elements["benchmark-summary"];
+  assert.equal(summary.hidden, false);
+  assert.deepEqual(descendants(summary, "li").map(text), [
+    "Pass 3 (37.5%)", "Fail 2 (25%)", "Indeterminate 1 (12.5%)", "Error 2 (25%)"
+  ]);
+  const chart = descendants(summary).find(node => node.role === "img");
+  assert.equal(chart["aria-label"], "8 tests: 3 pass, 2 fail, 1 indeterminate, 2 error.");
+  assert.match(chart.style, /conic-gradient\(var\(--test-pass\) 0% 37.5%/);
+  assert.match(chart.style, /var\(--test-error\) 75% 100%/);
+});
+
+test("summary includes tests on other pages and does not change when searching results", async () => {
+  const testResults = Object.fromEntries(Array.from({ length: 26 }, (_, index) => [
+    `test_${index}`, { result: index < 20 ? "pass" : "fail", log: `Evidence ${index}` }
+  ]));
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => ({ test_results: testResults }) }));
+  await benchmark.finish();
+  const summary = benchmark.elements["benchmark-summary"];
+  const before = text(summary);
+  assert.match(before, /20 \(76.9%\)/);
+  assert.match(before, /6 \(23.1%\)/);
+  const search = descendants(benchmark.elements["benchmark-table"], "input")[0];
+  search.value = "Evidence 25";
+  search.listeners.input();
+  assert.equal(text(summary), before);
+});
+
+test("summary preserves unknown or absent outcomes as Other and supports scalar and array results", async () => {
+  const results = [{ result: "pass" }, "fail", { result: "indeterminate" }, "error", null, {}, { result: "__proto__" }];
+  const benchmark = startBenchmark(() => ({ ok: true, json: async () => ({ test_results: results }) }));
+  await benchmark.finish();
+  const summary = benchmark.elements["benchmark-summary"];
+  assert.equal(descendants(summary, "li").length, 5);
+  assert.match(text(summary), /Other \/ not reported 3 \(42.9%\)/);
+  assert.match(descendants(summary).find(node => node.role === "img")["aria-label"], /^7 tests:/);
+});
+
+test("summary handles empty, missing and unsuccessful results without an invalid chart", async () => {
+  const empty = startBenchmark(() => ({ ok: true, json: async () => ({ test_results: {} }) }));
+  await empty.finish();
+  assert.equal(empty.elements["benchmark-summary"].hidden, false);
+  assert.match(text(empty.elements["benchmark-summary"]), /No test results were returned/);
+  assert.equal(descendants(empty.elements["benchmark-summary"]).some(node => node.role === "img"), false);
+  for (const response of [
+    { ok: true, json: async () => ({ score: 1 }) },
+    { ok: true, json: async () => ({ test_results: null }) },
+    { ok: false, json: async () => ({ error: "Service unavailable" }) }
+  ]) {
+    const benchmark = startBenchmark(() => response);
+    await benchmark.finish();
+    assert.equal(benchmark.elements["benchmark-summary"].hidden, true);
+  }
+});
 
 test("posts the GUID once and renders results as safe table text", async () => {
   const results = { score: 0.75, details: "<script>alert(1)</script>" };
