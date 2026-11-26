@@ -15,7 +15,13 @@
           <label for="<%= Rack::Utils.escape_html(operation) %>-guid" class="form-label fw-semibold">GUID on which to run benchmark</label>
           <input type="text" id="<%= Rack::Utils.escape_html(operation) %>-guid" name="guid" class="form-control form-control-lg"
                  placeholder="https://…" aria-describedby="<%= Rack::Utils.escape_html(operation) %>-guid-help" required>
-          <div id="<%= Rack::Utils.escape_html(operation) %>-guid-help" class="form-text mt-2">Use a complete HTTP or HTTPS resource URL as the GUID.</div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <span id="<%= Rack::Utils.escape_html(operation) %>-guid-help" class="form-text mt-0">Use a complete HTTP or HTTPS resource URL as the GUID.</span>
+            <% if config[:example_url] %>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-example-url="<%= Rack::Utils.escape_html(config[:example_url]) %>">Try with example record</button>
+            <% end %>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-clear-guid>Clear</button>
+          </div>
           <button type="submit" class="btn btn-primary btn-lg mt-4 action-label">run benchmark</button>
         </form>
       </div>
@@ -40,3 +46,5 @@
     </ol>
   </aside>
 </div>
+
+<script src="<%= asset_path('/js/examples.js') %>" defer></script>
