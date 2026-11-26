@@ -9,6 +9,11 @@
   --fair-action-active: #174f77;
   --fair-surface: #f0f5f9;
   --fair-border: #d4dfe7;
+  --test-pass: #006055;
+  --test-fail: #b4233a;
+  --test-indeterminate: #b77912;
+  --test-error: #8546a5;
+  --test-other: #64748b;
   --bs-body-font-family:
     -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
   --bs-body-bg: #f9f9f9;
@@ -20,6 +25,91 @@
   --bs-link-color: var(--fair-action);
   --bs-link-hover-color: var(--fair-action-active);
   --bs-border-color: var(--fair-border);
+}
+
+.test-summary-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2rem;
+}
+
+.test-summary-chart {
+  width: 11rem;
+  aspect-ratio: 1;
+  flex: 0 0 11rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+}
+
+.test-summary-center {
+  width: 68%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.test-summary-center strong {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.test-summary-center span {
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
+.test-summary-legend {
+  flex: 1 1 18rem;
+  max-width: 42rem;
+  min-width: 0;
+}
+
+.test-summary-outcome {
+  display: grid;
+  grid-template-columns: 0.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--fair-border);
+}
+
+.test-summary-outcome strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.test-summary-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--test-outcome-color);
+}
+
+.test-summary-pass {
+  --test-outcome-color: var(--test-pass);
+}
+
+.test-summary-fail {
+  --test-outcome-color: var(--test-fail);
+}
+
+.test-summary-indeterminate {
+  --test-outcome-color: var(--test-indeterminate);
+}
+
+.test-summary-error {
+  --test-outcome-color: var(--test-error);
+}
+
+.test-summary-other {
+  --test-outcome-color: var(--test-other);
 }
 
 body {

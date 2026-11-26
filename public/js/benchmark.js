@@ -465,6 +465,77 @@ function renderResult(value, caption = "Benchmark results", depth = 0, sectionLe
 }
 
 /**
+ * Summarize test outcomes once per test, independently of weights, conditions,
+ * search and pagination. Unrecognized or missing outcomes stay in Other rather
+ * than being reported as indeterminate. No test_results means no summary.
+ * @param {Object|Array|null|undefined} testResults - Champion's test_results.
+ * @returns {HTMLElement|null} Accessible doughnut chart and visible legend.
+ */
+function renderTestSummary(testResults) {
+  if (!testResults || typeof testResults !== "object") return null;
+
+  const outcomes = [
+    { key: "pass", label: "Pass", count: 0 },
+    { key: "fail", label: "Fail", count: 0 },
+    { key: "indeterminate", label: "Indeterminate", count: 0 },
+    { key: "error", label: "Error", count: 0 },
+    { key: "other", label: "Other / not reported", count: 0 }
+  ];
+  const aliases = { pass: "pass", passed: "pass", fail: "fail", failed: "fail", indeterminate: "indeterminate", error: "error" };
+  const tests = Object.values(testResults);
+  for (const test of tests) {
+    const value = test !== null && typeof test === "object" ? test.result : test;
+    const status = typeof value === "string" ? value.trim().toLowerCase() : "";
+    const key = Object.hasOwn(aliases, status) ? aliases[status] : "other";
+    outcomes.find(outcome => outcome.key === key).count++;
+  }
+
+  const section = resultElement("section", undefined, "card benchmark-card");
+  section.setAttribute("aria-labelledby", "test-summary-title");
+  const body = resultElement("div", undefined, "card-body p-4");
+  const heading = resultElement("h2", "Test result summary", "h5 mb-2");
+  heading.id = "test-summary-title";
+  body.append(heading);
+  section.append(body);
+  if (!tests.length) {
+    body.append(resultElement("p", "No test results were returned.", "text-body-secondary mb-0"));
+    return section;
+  }
+
+  body.append(resultElement("p", "Counts include all tests, across every page. Each test counts once, regardless of its weight.", "small text-body-secondary mb-4"));
+  const layout = resultElement("div", undefined, "test-summary-layout");
+  const chart = resultElement("div", undefined, "test-summary-chart");
+  const visible = outcomes.filter(outcome => outcome.key !== "other" || outcome.count > 0);
+  chart.setAttribute("role", "img");
+  chart.setAttribute("aria-label", `${tests.length} ${tests.length === 1 ? "test" : "tests"}: ${visible.map(outcome => `${outcome.count} ${outcome.label.toLowerCase()}`).join(", ")}.`);
+  let offset = 0;
+  const slices = outcomes.filter(outcome => outcome.count > 0).map(outcome => {
+    const start = offset;
+    offset += outcome.count / tests.length * 100;
+    return `var(--test-${outcome.key}) ${start}% ${offset}%`;
+  });
+  chart.setAttribute("style", `background: conic-gradient(${slices.join(", ")})`);
+  const center = resultElement("div", undefined, "test-summary-center");
+  center.setAttribute("aria-hidden", "true");
+  center.append(resultElement("strong", String(tests.length)), resultElement("span", tests.length === 1 ? "test" : "tests"));
+  chart.append(center);
+
+  const legend = resultElement("ul", undefined, "test-summary-legend list-unstyled mb-0");
+  for (const outcome of visible) {
+    const item = resultElement("li", undefined, `test-summary-outcome test-summary-${outcome.key}`);
+    const swatch = resultElement("span", undefined, "test-summary-swatch");
+    swatch.setAttribute("aria-hidden", "true");
+    const percentage = Math.round(outcome.count / tests.length * 1000) / 10;
+    item.append(swatch, resultElement("span", outcome.label),
+      resultElement("strong", `${outcome.count} (${percentage}%)`));
+    legend.append(item);
+  }
+  layout.append(chart, legend);
+  body.append(layout);
+  return section;
+}
+
+/**
  * Run the assessment once when this script loads on a benchmark page.
  * Reads endpoint and guid from #benchmark's data attributes, posts to the local
  * endpoint and renders its JSON response. Manages the elapsed-time indicator,
@@ -481,6 +552,8 @@ async function runBenchmark() {
   const error = document.getElementById("benchmark-error");
   const results = document.getElementById("benchmark-results");
   const waiting = document.getElementById("benchmark-waiting");
+  const summary = document.getElementById("benchmark-summary");
+  if (summary) summary.hidden = true;
   let timer;
 
   try {
@@ -512,11 +585,17 @@ async function runBenchmark() {
     const resultContent = document.getElementById("benchmark-table");
     resultControlGroups = [];
     resultContent.replaceChildren(renderResult(data));
+    if (summary) {
+      const content = renderTestSummary(data?.test_results);
+      summary.replaceChildren(...(content ? [content] : []));
+      summary.hidden = !content;
+    }
     document.getElementById("benchmark-expand-controls").replaceChildren(resultExpansionControls(resultContent, "all results"));
     refreshResultControls();
     results.hidden = false;
     document.getElementById("benchmark-status").textContent = "Assessment complete. Results are ready to explore.";
   } catch (failure) {
+    if (summary) summary.hidden = true;
     results.hidden = true;
     error.textContent = `Benchmark failed: ${failure?.message || "Unable to run the benchmark. Please try again."}`;
     error.hidden = false;
